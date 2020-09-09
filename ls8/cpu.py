@@ -7,10 +7,13 @@
 import sys
 
 # Day 1 Step 4-6
-# Instructions
-LDI = 0b10000010  # Set the value of a register to an integer
-PRN = 0b01000111  # Print numeric value stored in the given register
-HLT = 0b00000001  # Halt the CPU (and exit the emulator)
+
+LDI = 0b10000010
+PRN = 0b01000111
+HLT = 0b00000001
+MUL = 0b10100010
+PUSH = 0b01000101
+POP = 0b01000110
 
 
 class CPU:
@@ -19,12 +22,23 @@ class CPU:
     def __init__(self):
         """Construct a new CPU."""
         # Day 1 Step 1
+        self.br_tbl = {}
         # hold 256 bytes of memory
         self.ram = [0] * 256
         # hold 8 general-purpose registers
         self.reg = [0] * 8
         # Program Counter
         self.pc = 0
+
+        # Instructions
+        # Halt the CPU (and exit the emulator).
+        self.br_tbl[HLT] = self.hlt_func
+        # load "immediate", store a value in a register, or "set this register to this value".
+        self.br_tbl[LDI] = self.ldi_func
+        # a pseudo-instruction that prints the numeric value stored in a register.
+        self.br_tbl[PRN] = self.prn_func
+        # Multiply the values in two registers together and store the result in register1.
+        self.br_tbl[MUL] = self.mul_func
 
     # Day 1 Step 2
     # Ram read should accept the address to read and
@@ -42,48 +56,48 @@ class CPU:
     def load(self):
         """Load a program into memory."""
         # Load the program file
-        address = 0
+        try:
+            address = 0
 
-        # if we don't specify a file at all. originally throws error, list index out of range
-        # describe how to use this program
-        if len(sys.argv) != 2:
-            print("Usage: comp.py progname")
-            sys.exit(0)
+            # if we don't specify a file at all. originally throws error, list index out of range
+            # describe how to use this program
+            if len(sys.argv) != 2:
+                print("Usage: comp.py progname")
+                sys.exit(0)
 
-        # from input in terminal, python ls8.py examples/mult.ls8
-        with open(f'{sys.argv[1]}') as f:
-            for line in f:
-                # line and temp is not necessary, but a 'just in case'
-                line = line.strip()
-                temp = line.split()
-                # if line is empty
-                if len(temp) == 0:
-                    continue
-                # if temp at 0 is a hashmark
-                if temp[0] == "#":
-                    continue
-                try:
-                    temp = line.split()
-                    # using base 2, decimal
-                    self.ram[address] = int(temp[0], 2)
+            # from input in terminal, python ls8.py examples/mult.ls8
+            with open(f'{sys.argv[1]}') as f:
+                for line in f:
+                    # line and temp is not necessary, but a 'just in case'
+                    line0 = line.split('#')
+                    temp = line0[0].strip()
+                    # if line is empty
+                    # if len(temp) == 0:
+                    #     continue
+                    # # if temp at 0 is a hashmark
+                    # if temp[0] == "#":
+                    #     continue
+                    #     # temp = line.split('#')
+                    #     # using base 2, decimal
+                    self.ram[address] = int(temp, 2)
                     address += 1
-                # to handle errors such as comments, blanklines, etc.
-                except ValueError:
-                    print(f"Invalid number: {temp[0]}")
-                    sys.exit(1)
-                    # check validity, comes from the command line "Thinking like a villan"
-                except FileNotFoundError:
-                    print(f"Couldn't open {sys.argv[1]}")
-                    sys.exit(3)
+                    # to handle errors such as comments, blanklines, etc.
+        except ValueError:
+            print(f"Invalid number: {temp[0]}")
+            sys.exit(1)
+        # check validity, comes from the command line "Thinking like a villan"
+        except FileNotFoundError:
+            print(f"Couldn't open {sys.argv[1]}")
+            sys.exit(3)
 
-        # print first 12 address
-        print(self.ram[:12])
-        sys.exit(2)
+            # print first 12 address
+            # print(self.ram[:12])
+            sys.exit(2)
 
-        # valid check if there is no instructions
-        if address == 0:
-            print("Program was empty!")
-            sys.exit(4)
+            # valid check if there is no instructions
+            if address == 0:
+                print("Program was empty!")
+                sys.exit(4)
 
         # For now, we've just hardcoded a program:
 
@@ -107,6 +121,10 @@ class CPU:
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
         # elif op == "SUB": etc
+        elif op == "MUL":
+            result = self.reg[reg_a] * self.reg[reg_b]
+            self.reg[reg_a] = result
+            self.pc += 3
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -130,7 +148,33 @@ class CPU:
 
         print()
 
+    # Day 1 Step 4: Implement the HLT instruction handler
+    def hlt_func(self):
+        exit(1)
+
+    def ldi_func(self):
+        MAR = self.ram_read(self.pc + 1)
+        MDR = self.ram_read(self.pc + 2)
+
+        if MAR < len(self.ram):
+            self.reg[MAR] = MDR
+        # Increment program counter by 3 steps inside the RAM
+        self.pc += 3
+
+    def prn_func(self):
+        operand_a = self.ram_read(self.pc + 1)
+        print(self.reg[operand_a])
+        self.pc += 2
+
+    # Day 2 Step 8: Implement a Multiply and Print the Result
+    def mul_func(self):
+        reg_a = self.ram_read(self.pc + 1)
+        # register 2
+        reg_b = self.ram_read(self.pc + 2)
+        self.alu("MUL", reg_a, reg_b)
+
     # Day 1 Step 3
+
     def run(self):
         """Run the CPU."""
         self.running = True
@@ -138,19 +182,40 @@ class CPU:
         while self.running == True:
 
             IR = self.ram[self.pc]
-            # Loading
-            # if IR == 0b10000010:
-            if IR == LDI:
-                operand_a = self.ram[self.pc + 1]
-                operand_b = self.ram[self.pc + 2]
-                self.reg[operand_a] = operand_b
-                self.pc += 3  # 3 movements
-            # elif IR == 0b01000111:
-            elif IR == PRN:
-                operand_a = self.ram[self.pc + 1]
-                value = self.reg[operand_a]
-                print(value)
-                self.pc += 2
-            # elif IR == 0b00000001:
-            elif IR == HLT:
-                self.running = False
+            # # Loading
+            # # if IR == 0b10000010:
+            # if IR == LDI:
+            #     operand_a = self.ram[self.pc + 1]
+            #     operand_b = self.ram[self.pc + 2]
+            #     self.reg[operand_a] = operand_b
+            #     self.pc += 3  # 3 movements
+            # # elif IR == 0b01000111:
+            # elif IR == PRN:
+            #     operand_a = self.ram[self.pc + 1]
+            #     value = self.reg[operand_a]
+            #     print(value)
+            #     self.pc += 2
+            # # elif IR == 0b00000001:
+            # elif IR == HLT:
+            #     self.running = False
+            # # elif IR == 0b10100010:
+            # elif IR == MUL:
+            #     print("This is MUlt_Func")
+            #     # register 1
+            #     register1 = self.ram_read(self.pc + 1)
+            #     # register 2
+            #     register2 = self.ram_read(self.pc + 2)
+
+            #     self.reg[register1] = self.reg[register1] * self.reg[register2]
+            #     self.pc += 3
+
+            # elif IR == PUSH:
+            #     self.reg[7] -= 1
+            #     operand_a = self.ram_read(self.pc + 1)
+            #     self.ram[self.reg[7]] = self.reg[operand_a]
+            # print("IR: ", IR)
+            if IR in self.br_tbl:
+                # find the function/instruction based on the IR
+                self.br_tbl[IR]()
+            else:
+                print("CAN'T FiND", IR)
