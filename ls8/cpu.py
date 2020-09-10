@@ -39,6 +39,10 @@ class CPU:
         self.br_tbl[PRN] = self.prn_func
         # Multiply the values in two registers together and store the result in register1.
         self.br_tbl[MUL] = self.mul_func
+        # Push the value in the given register on the stack
+        self.br_tbl[PUSH] = self.push_inst
+        # Pop the value in the stack into the given register
+        self.br_tbl[POP] = self.pop_inst
 
     # Day 1 Step 2
     # Ram read should accept the address to read and
@@ -172,6 +176,24 @@ class CPU:
         # register 2
         reg_b = self.ram_read(self.pc + 2)
         self.alu("MUL", reg_a, reg_b)
+
+    # Step 10: Implement System Stack
+    def push_inst(self):
+        # Decrement the stack pointer
+        self.reg[7] -= 1
+        operand_a = self.ram_read(self.pc + 1)
+        # Store value from reg to ram
+        self.ram[self.reg[7]] = self.reg[operand_a]
+        self.pc += 2
+
+    # Step 10: Implement System Stack
+    def pop_inst(self):
+        # Read value of SP, overwrite next register
+        operand_a = self.ram_read(self.pc + 1)
+        self.reg[operand_a] = self.ram_read(self.reg[7])
+        # Increment SP
+        self.reg[7] += 1
+        self.pc += 2
 
     # Day 1 Step 3
 
